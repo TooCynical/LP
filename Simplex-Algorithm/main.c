@@ -12,6 +12,5 @@ int main(int argc, const char *argv[]){
     /* Read LP from the file and print */
     LP *P = get_LP(argv[1]);
     print_LP(P);
-    free_LP(P);
     return EXIT_SUCCESS;
 }

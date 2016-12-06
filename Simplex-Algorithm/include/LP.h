@@ -2,15 +2,24 @@
 #include <stdlib.h>
 
 #include "LP_reader.h"
+#include "lin_alg.h"
 
 typedef struct {
-	int m;
-	int n;
-    double **A;
-    double *b;
-    double *c;
+    Vector b; 	// inequality vector
+    Vector c; 	// costs vector
+    Matrix A; 	// inequality matrix
+
 } LP;
 
+typedef struct {
+	Vector B;
+	Vector N;
+	Vector p;	
+	Vector r;
+	Matrix Q;
+	double z0;
+} Tableaux;
+
 LP *get_LP(const char*);
-void print_LP(LP*);
-void free_LP(LP*);
+void print_LP(LP *P);
+void free_LP(LP *P);
