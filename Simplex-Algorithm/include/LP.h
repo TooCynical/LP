@@ -3,11 +3,12 @@
 
 #include "LP_reader.h"
 #include "lin_alg.h"
+#include "error.h"
 
 typedef struct {
-    Vector b; 	// inequality vector
-    Vector c; 	// costs vector
-    Matrix A; 	// inequality matrix
+    Vector *b; 	// inequality vector
+    Vector *c; 	// costs vector
+    Matrix *A; 	// inequality matrix
 
 } LP;
 
