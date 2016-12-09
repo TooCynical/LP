@@ -4,6 +4,8 @@
 
 #include "error.h"
 
+#define ZERO_TOL 0.0001
+
 typedef struct {
     unsigned int size_r;    // Number of rows of matrix
     unsigned int size_c;    // Number of columns of matrix
@@ -16,8 +18,12 @@ typedef struct {
     double* entries;    // Actual vector entries
 } Vector;
 
+// Return whether l is very close to zero (see ZERO_TOL)
+int is_zero(double l);
+
 // Compute a QR-decompostion of A and store it in Q, R. 
-// Uses classical Gram-Schmidt
+// Uses classical Gram-Schmidt and only gives an orthogonal Q
+// if A is of full rank
 void QR_decomp(const Matrix *A, Matrix *Q, Matrix *R);
 
 // Return a pointer to a vector of given size with zero entries
@@ -44,6 +50,8 @@ void sub_to_vector(Vector *a, const Vector *b);
 // Set a equal to l*a
 void scalar_to_vector(Vector *a, const double l);
 
+// Return the rank of a square matrix
+int rank(Matrix *A);
 
 // Replace the i-th column of given matrix by given vector
 void replace_col(Matrix *matrix, const Vector *vector, unsigned int col);

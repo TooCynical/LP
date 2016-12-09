@@ -3,16 +3,19 @@
 int solve_system(const Matrix *A, const Vector *b, Vector *ret) {       
     if (A->size_r != A->size_c)
         runtime_error("solve_system: matrix should be square");
-
     if (A->size_r != b->size || A->size_c != ret->size)
         runtime_error("solve_system: incompatible sizes");
+    if (rank(A) < A->size_c)
+        runtime_error("solve_system: matrix should be of full rank");
+
+
 
     // Find a QR-decomposition of A and multiply Q^t b
     Matrix *Q = zero_matrix(A->size_r, A->size_c);
     Matrix *R = zero_matrix(A->size_c, A->size_c);
     QR_decomp(A, Q, R);
     Matrix *Qt = trans_matrix(Q);
-    Vector *Qtb = mult_vector(Q, b);
+    Vector *Qtb = mult_vector(Qt, b);
     free_matrix(Qt);
 
     // Find a solution by back-substitution
@@ -29,7 +32,7 @@ int solve_system(const Matrix *A, const Vector *b, Vector *ret) {
         }
         else {
             // No solution
-            if (R->entries[i][i] == 0) {
+            if (is_zero(R->entries[i][i])) {
                 free_matrix(Q);
                 free_matrix(R);
                 free_vector(Qtb);
@@ -63,11 +66,38 @@ void QR_decomp(const Matrix *A, Matrix *Q, Matrix *R) {
             sub_to_vector(q, dummy);
         }
         R->entries[i][i] = norm(q);
-        scalar_to_vector(q, 1. / R->entries[i][i]);
-        replace_col(Q, q, i);
+        if (!is_zero(R->entries[i][i])) {
+            scalar_to_vector(q, 1. / R->entries[i][i]);
+            replace_col(Q, q, i);
+        }
+        else 
+            R->entries[i][i] = 0;
     }
     free_vector(q);
     free_vector(dummy);
+}
+
+int is_zero(double l) {
+    return (abs(l) < ZERO_TOL);
+}
+
+int rank(Matrix *A) {
+    if (A->size_r != A->size_c)
+        runtime_error("rank: matrix should be square");
+    
+    // Find a QR-decomposition of A
+    Matrix *Q = zero_matrix(A->size_r, A->size_c);
+    Matrix *R = zero_matrix(A->size_c, A->size_c);
+    QR_decomp(A, Q, R);
+    
+    unsigned int i, r;
+    r = 0;
+    // Count number of non-zero diagonal elements of R
+    for (i = 0; i < R->size_c; i++)
+        r += (!is_zero(R->entries[i][i]));
+    free_matrix(Q);
+    free_matrix(R);
+    return r;
 }
 
 void reset_vector(const Vector *vector) {

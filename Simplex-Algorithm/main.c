@@ -7,7 +7,7 @@ int main(int argc, const char *argv[]){
     
     LP *P;
 
-    /* Check if enough arguments were given */
+    // Check if enough arguments were given
     if (argc < 2) {
         //fprintf(stderr, "Usage:  %s  <lp file> [verbose]\n", argv[0]);
         //return EXIT_FAILURE;
@@ -37,8 +37,12 @@ int main(int argc, const char *argv[]){
     Vector *bb = zero_vector(P->A->size_r);
     bb->entries[0] = 2;
     
-    if (solve_system(P->A, bb, sol))
+    printf("Rank A: %d\n", rank(P->A));
+    print_vector(bb);
+
+    if (solve_system(P->A, bb, sol)) {
         print_vector(sol);
+    }
     else
         printf("No solution\n");
 
