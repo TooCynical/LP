@@ -1,24 +1,66 @@
 #include "lin_alg.h"
 
-int solve_system(const Matrix *A, const Vector *b, Vector *ret) {       
+Matrix *inverse_matrix(const Matrix *A) {
+    if (A->size_r != A->size_c)
+        runtime_error("inverse_matrix: matrix should be square");
+
+    // Find a QR-decomposition of A
+    Matrix *Q = zero_matrix(A->size_r, A->size_c);
+    Matrix *R = zero_matrix(A->size_c, A->size_c);
+    QR_decomp(A, Q, R);
+
+    if (rank_R(R) < A->size_c) {
+        runtime_error("inverse_matrix: matrix singular");
+    }
+    Matrix *ret = zero_matrix(A->size_r, A->size_c);
+
+    // Solve Ax = e_i for all basis vectors
+    unsigned int i;
+    for (i = 0; i < A->size_c; i ++) {
+        Vector *e = zero_vector(A->size_c);
+        e->entries[i] = 1;
+        Vector *sol = solve_system_QR(Q, R, e);
+        replace_col(ret, sol, i);
+        // This freeing is suboptimal
+        free_vector(e);
+        free_vector(sol);
+    }
+    free_matrix(Q);
+    free_matrix(R);
+    return ret;
+}
+
+Vector *solve_system(const Matrix *A, const Vector *b) {       
     if (A->size_r != A->size_c)
         runtime_error("solve_system: matrix should be square");
-    if (A->size_r != b->size || A->size_c != ret->size)
+    if (A->size_r != b->size)
         runtime_error("solve_system: incompatible sizes");
-    if (rank(A) < A->size_c)
-        runtime_error("solve_system: matrix should be of full rank");
-
-
 
     // Find a QR-decomposition of A and multiply Q^t b
     Matrix *Q = zero_matrix(A->size_r, A->size_c);
     Matrix *R = zero_matrix(A->size_c, A->size_c);
     QR_decomp(A, Q, R);
+
+    if (rank_R(R) < A->size_c)
+        runtime_error("solve_system: matrix should be of full rank");
+
+    Vector *ret = solve_system_QR(Q, R, b);
+    free_matrix(Q);
+    free_matrix(R);
+    return ret;
+}
+
+Vector *solve_system_QR(const Matrix *Q, const Matrix *R, const Vector *b) {
+    
+    if (Q->size_c != R->size_r)
+        runtime_error("solve_system_QR: Q, R dimension mismatch");
+
     Matrix *Qt = trans_matrix(Q);
     Vector *Qtb = mult_vector(Qt, b);
     free_matrix(Qt);
 
     // Find a solution by back-substitution
+    Vector *ret = zero_vector(R->size_c);
     double val;
     int i; // current column
     int j; // current row
@@ -33,25 +75,20 @@ int solve_system(const Matrix *A, const Vector *b, Vector *ret) {
         else {
             // No solution
             if (is_zero(R->entries[i][i])) {
-                free_matrix(Q);
-                free_matrix(R);
-                free_vector(Qtb);
-                return 0;
+                runtime_error("solve_system_QR: system has no solution");
             }
             ret->entries[i] = val / R->entries[i][i];
         }
     }
-    free_matrix(Q);
-    free_matrix(R);
     free_vector(Qtb);
-    return 1;
+    return ret;
 }
 
 void QR_decomp(const Matrix *A, Matrix *Q, Matrix *R) {
     if (A->size_r != Q->size_r || A->size_c != Q->size_c)
         runtime_error("QR_decomp: A, Q are of unequal size");
     if (A->size_c != R->size_c || A->size_c != R->size_c)
-        runtime_error("QR_decomp: R of wrong size (should be nxn)");
+        runtime_error("QR_decomp: R of wrong size (should be mxm)");
     
     Vector *q = zero_vector(A->size_r);
     Vector *dummy = zero_vector(A->size_r);
@@ -70,7 +107,7 @@ void QR_decomp(const Matrix *A, Matrix *Q, Matrix *R) {
             scalar_to_vector(q, 1. / R->entries[i][i]);
             replace_col(Q, q, i);
         }
-        else 
+        else
             R->entries[i][i] = 0;
     }
     free_vector(q);
@@ -78,10 +115,13 @@ void QR_decomp(const Matrix *A, Matrix *Q, Matrix *R) {
 }
 
 int is_zero(double l) {
-    return (abs(l) < ZERO_TOL);
+    if (l >= 0)
+        return (l < ZERO_TOL);
+    else 
+        return (-l < ZERO_TOL);
 }
 
-int rank(Matrix *A) {
+int rank(const Matrix *A) {
     if (A->size_r != A->size_c)
         runtime_error("rank: matrix should be square");
     
@@ -90,13 +130,19 @@ int rank(Matrix *A) {
     Matrix *R = zero_matrix(A->size_c, A->size_c);
     QR_decomp(A, Q, R);
     
+    int r = rank_R(R);
+
+    free_matrix(Q);
+    free_matrix(R);
+    return r;
+}
+
+int rank_R(const Matrix *R) {
     unsigned int i, r;
     r = 0;
     // Count number of non-zero diagonal elements of R
     for (i = 0; i < R->size_c; i++)
         r += (!is_zero(R->entries[i][i]));
-    free_matrix(Q);
-    free_matrix(R);
     return r;
 }
 
@@ -143,6 +189,67 @@ void replace_col(Matrix *matrix, const Vector *vector, unsigned int col) {
         matrix->entries[i][col] = vector->entries[i];
 }
 
+int is_smaller_zero_vect(const Vector *vector) {
+    unsigned int i;
+    for (i = 0; i < vector->size; i++) {
+        if (vector->entries[i] > ZERO_TOL)
+            return 0;
+    }
+    return 1;
+}
+
+Vector *subind_vector(const Vector *vector, const Vector *bitmask) {
+    if (vector->size != bitmask->size)
+        runtime_error("subind_vector: bitmask should be of same size as vector");
+    unsigned int i, count;
+    count = 0;
+    // Set which indices are not zero in bitmask
+    Vector *indices = zero_vector(vector->size);
+    for (i = 0; i < bitmask->size; i++) {
+        if (bitmask->entries[i] != 0) {
+            indices->entries[count] = i;
+            count ++;
+        }
+    }
+
+    // Now create the subvector
+    Vector *res = zero_vector(count);
+    unsigned int j, d;
+    for (j = 0; j < count; j++) {
+        d = (int)indices->entries[j];
+        res->entries[j] = vector->entries[d];
+    }
+    free_vector(indices);
+    return res;
+}
+
+Matrix *subind_matrix(const Matrix *matrix, const Vector *bitmask) {
+    if (matrix->size_c != bitmask->size)
+        runtime_error("subind_matrix: bitmask should have an entry for each column of matrix");
+    unsigned int i, count;
+    count = 0;
+    // Set which indices are not zero in bitmask
+    Vector *indices = zero_vector(matrix->size_c);
+    for (i = 0; i < bitmask->size; i++) {
+        if (bitmask->entries[i] != 0) {
+            indices->entries[count] = i;
+            count ++;
+        }
+    }
+
+    // Now create the submatrix
+    Matrix *res = zero_matrix(matrix->size_r, count);
+    unsigned int j, d;
+    for (i = 0; i < matrix->size_r; i++) {
+        for (j = 0; j < count; j++) {
+            d = (int)indices->entries[j];
+            res->entries[i][j] = matrix->entries[i][d];
+        }
+    }
+    free_vector(indices);
+    return res;
+}
+
 Matrix *trans_matrix(const Matrix *matrix) {
     Matrix *res = zero_matrix(matrix->size_c, matrix->size_r);
     unsigned int i, j;
@@ -153,7 +260,6 @@ Matrix *trans_matrix(const Matrix *matrix) {
     }
     return res;
 }
-
 
 Matrix *mult_matrix(const Matrix *A, const Matrix *B) {
     if (A->size_c != B->size_r)
@@ -169,6 +275,15 @@ Matrix *mult_matrix(const Matrix *A, const Matrix *B) {
         }    
     }
     return res;
+}
+
+void scalar_to_matrix(Matrix *A, const double l) {
+    unsigned int i, j;
+    for (i = 0; i < A->size_r; i++) {
+        for (j = 0; j < A->size_c; j++) {
+            A->entries[i][j] *= l;    
+        }
+    }
 }
 
 void add_to_vector(Vector *a, const Vector *b) {
@@ -234,6 +349,30 @@ Vector *sub_vector(const Vector *a, const Vector *b) {
     return res;
 }
 
+Vector *swap_zero_nonzero(const Vector *vector) {
+    Vector *ret = zero_vector(vector->size);
+    unsigned int i;
+    for (i = 0; i < vector->size; i++)
+        ret->entries[i] = (vector->entries[i] == 0);
+    return ret;
+}
+
+void copy_to_vector(Vector *vector, const Vector *ret) {
+    if (vector->size != ret->size)
+        runtime_error("copy_to_vector: vectors of unequal size");
+    unsigned int i;
+    for (i = 0; i < vector->size; i++)
+        ret->entries[i] = vector->entries[i];
+}
+
+Vector *copy_vector(const Vector *vector) {
+    Vector *ret = zero_vector(vector->size);
+    unsigned int i;
+    for (i = 0; i < vector->size; i++)
+        ret->entries[i] = vector->entries[i];
+    return ret;
+}
+
 Vector *zero_vector(int size) {
     Vector *res = calloc(1, sizeof(Vector));
     res->size = size;
@@ -257,7 +396,7 @@ void print_matrix(const Matrix *matrix) {
     for (i = 0; i < matrix->size_r; i++) {
         printf("[");
         for (j = 0; j < matrix->size_c; j++) {
-            printf("%5.1lf%s", matrix->entries[i][j], (j == matrix->size_c-1 ? "]\n" : ", "));
+            printf("%5.2lf%s", matrix->entries[i][j], (j == matrix->size_c-1 ? "]\n" : ", "));
         }
     }
 }
@@ -266,7 +405,7 @@ void print_vector(const Vector *vector) {
     unsigned int j;
     printf("[");
     for (j = 0; j < vector->size; j++) {
-         printf("%.1lf%s", vector->entries[j], (j == vector->size-1 ? "]\n" : ", "));
+         printf("%.2lf%s", vector->entries[j], (j == vector->size-1 ? "]\n" : ", "));
     }
 }   
 
